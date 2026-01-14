@@ -1,7 +1,7 @@
 import json
 import os
 import google.generativeai as genai
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field
 from app.core.config import settings
 
@@ -10,49 +10,51 @@ if settings.GOOGLE_API_KEY:
 
 
 class GraderResult(BaseModel):
-    main_topic: str = Field(description="Тема из таблицы успеваемости")
+    main_topic: str = Field(
+        description="Тема из таблицы успеваемости (в точности как в заголовке)"
+    )
     correct_variant: str = Field(description="Правильный перевод")
     alternatives: list[str] = Field(description="Альтернативные варианты")
     score: int = Field(description="Оценка от 0 до 10")
-    errors: list[Dict[str, str]] = Field(
-        description="Список ошибок с типом и объяснением на русском"
+    errors: list[Dict[str, str]] = Field(description="Список ошибок")
+    recommendation: str = Field(description="Рекомендация")
+    new_vocabulary: list[str] = Field(
+        description="Список 3-5 полезных английских слов из этого перевода для запоминания"
     )
-    recommendation: str = Field(description="Рекомендация что повторить")
 
 
 MASTER_PROMPT_TEXT = """
-Ты — опытный преподаватель английского языка для русскоязычных студентов.
-Твоя задача — проверять переводы и создавать новые задания.
-ТВОЙ ЯЗЫК ОТВЕТОВ — СТРОГО РУССКИЙ (Russian).
+Ты — AI-репетитор английского. Твоя задача — проверять переводы и генерировать задания.
+ТВОЙ ЯЗЫК ОТВЕТОВ — СТРОГО РУССКИЙ.
+
+ВАЖНО: При проверке учитывай "Текущий уровень" студента из контекста. Не требуй знаний уровня C1, если студент A1.
 
 ФОРМАТ ОТВЕТА (JSON):
-Ты всегда должен отвечать только валидным JSON объектом.
-
-РЕЖИМ 1: ПРОВЕРКА (Когда дано "Student Answer")
+РЕЖИМ 1: ПРОВЕРКА
 {
-    "main_topic": "Название темы из таблицы (например: 'Артикли')",
-    "correct_variant": "Исправленный английский текст",
-    "alternatives": ["Вариант 1", "Вариант 2"],
-    "score": 0, // Целое число 0-10
-    "errors": [
-        {
-            "type": "Грамматика/Лексика",
-            "explanation": "Объяснение ошибки на русском языке."
-        }
-    ],
-    "recommendation": "Совет на русском языке."
+    "main_topic": "Тема (копируй точное название заголовка из таблицы, например 'Артикли (a/an, the)')",
+    "correct_variant": "Текст",
+    "alternatives": ["Вариант"],
+    "score": 8,
+    "errors": [{"type": "...", "explanation": "..."}],
+    "recommendation": "...",
+    "new_vocabulary": ["word1", "word2 - перевод"]
 }
 
-РЕЖИМ 2: ГЕНЕРАЦИЯ (Когда просят "GENERATE_TASK")
-В ответ верни JSON:
+РЕЖИМ 2: ГЕНЕРАЦИЯ ЗАДАНИЯ
+Проанализируй таблицу. Найди темы с низким баллом или малым количеством оценок.
+Учитывай список "Активный словарный запас" — старайся использовать изученные слова + 1-2 новых.
+Верни JSON:
 {
-    "next_task": "Предложение на русском языке для перевода, основанное на слабых местах студента."
+    "next_task": "Предложение на русском языке..."
 }
 """
 
 
 class GraderAgent:
-    def __init__(self, model_name: str = "gemini-3-flash-preview"):
+    def __init__(
+        self, model_name: str = "gemini-3-flash-preview"
+    ):  # ЗАПРЕЩЕНО менять модель
         self.model = genai.GenerativeModel(
             model_name=model_name,
             system_instruction=MASTER_PROMPT_TEXT,
@@ -68,49 +70,52 @@ class GraderAgent:
     ) -> Dict[str, Any]:
 
         user_message = f"""
-        --- РЕЖИМ ПРОВЕРКИ ---
-        **Задание (Русский):** "{original_task}"
-        **Ответ студента (English):** "{student_translation}"
+        --- ЗАДАНИЕ ---
+        Original: "{original_task}"
+        Student: "{student_translation}"
         
-        --- КОНТЕКСТ: УСПЕВАЕМОСТЬ ---
+        --- КОНТЕКСТ УСПЕВАЕМОСТИ И УРОВНЯ ---
         {context_table}
         
-        --- КОНТЕКСТ: ЖУРНАЛ ---
+        --- ИСТОРИЯ ОШИБОК ---
         {context_journal}
-        
-        Проверь перевод и верни JSON.
         """
         try:
             response = await self.model.generate_content_async(user_message)
-            return json.loads(response.text)
+            parsed_response = json.loads(response.text)
+
+            if isinstance(parsed_response, list):
+                if len(parsed_response) > 0:
+                    return parsed_response[0]
+                else:
+                    return {}
+
+            return parsed_response
         except Exception as e:
-            return {"score": 0, "errors": [{"type": "Error", "explanation": str(e)}]}
+            return {
+                "score": 0,
+                "errors": [{"type": "Error", "explanation": str(e)}],
+                "main_topic": "General",
+                "correct_variant": "Error",
+                "alternatives": [],
+                "recommendation": "Try again",
+                "new_vocabulary": [],
+            }
 
     async def generate_new_task(
         self,
         context_table: Optional[str] = "",
         context_journal: Optional[str] = "",
     ) -> str:
-
         user_message = f"""
-        --- РЕЖИМ ГЕНЕРАЦИИ ---
         Действие: GENERATE_TASK
-        
-        Проанализируй успеваемость студента:
+        Контекст:
         {context_table}
-        
-        И его прошлые ошибки:
         {context_journal}
-        
-        Придумай ОДНО предложение на русском языке для перевода на английский.
-        Оно должно тренировать самую слабую тему студента.
-        Верни JSON: {{"next_task": "..."}}
         """
-
         try:
             response = await self.model.generate_content_async(user_message)
             data = json.loads(response.text)
-            return data.get("next_task", "Ошибка генерации задания.")
-        except Exception as e:
-            print(f"Error generating task: {e}")
-            return "Переведи: У меня есть кот."
+            return data.get("next_task", "Переведи: У меня есть кот.")
+        except:
+            return "Переведи: У меня есть собака."
