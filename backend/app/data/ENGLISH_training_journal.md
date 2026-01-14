@@ -162,10 +162,12 @@ The green cat plays on the big table now. The doctor works in the park.
 My frend playing small dog in the garden.The red лежитing in the big box on the table.
 
 **Проверка:**
+
 - **Тема:** Времена Present (Simple vs. Cont.)
 - **Правильно:** My friend is playing with a small dog in the garden. The red ball is in the big box on the table.
 - **Оценка:** 3/10
 - **Разбор ошибок:**
+
   - **Орфография:** Слово 'friend' (друг) пишется с буквой 'i'.
   - **Грамматика - Вспомогательный глагол:** Для настоящего продолженного времени (Present Continuous) обязательно нужен глагол-связка 'is' перед 'playing'.
   - **Грамматика - Пропуск слов:** После 'playing' пропущен предлог 'with' (с) и артикль 'a' перед 'small dog'. Правильно: 'playing with a small dog'.
@@ -174,47 +176,5 @@ My frend playing small dog in the garden.The red лежитing in the big box on
 
 - **Рекомендация:** Тебе нужно повторить структуру Present Continuous: Подлежащее + am/is/are + глагол с -ing. Также старайся не переводить слова 'в лоб', смешивая языки. Всегда проверяй, есть ли в английском предложении глагол (is/are), если в русском его нет.
 - **Новые слова:** friend - друг, box - коробка, with - с (предлог), ball - мяч
-
----
-
-### Задание - 15.01.2026
-
-**Задание (Русский):**
-Мой друг сейчас работает в большой больнице. Маленькая собака играет с красным мячом в саду.
-
-**Мой ответ (Английский):**
-My friend working in the big hospital now. The small dog playing with a red ball in the garden.
-
-**Проверка:**
-- **Тема:** General
-- **Правильно:** Error
-- **Оценка:** 0/10
-- **Разбор ошибок:**
-  - **Error:** 429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. 
-* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3-flash
-Please retry in 28.680384072s. [links {
-  description: "Learn more about Gemini API quotas"
-  url: "https://ai.google.dev/gemini-api/docs/rate-limits"
-}
-, violations {
-  quota_metric: "generativelanguage.googleapis.com/generate_content_free_tier_requests"
-  quota_id: "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
-  quota_dimensions {
-    key: "model"
-    value: "gemini-3-flash"
-  }
-  quota_dimensions {
-    key: "location"
-    value: "global"
-  }
-  quota_value: 20
-}
-, retry_delay {
-  seconds: 28
-}
-]
-
-- **Рекомендация:** Try again
-- **Новые слова:** 
 
 ---

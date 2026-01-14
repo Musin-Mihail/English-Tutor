@@ -19,15 +19,36 @@ async def check_translation(request: TranslationRequest):
         context_journal=journal_content,
     )
 
-    try:
-        file_manager.update_journal(
-            task=request.original_task,
-            student_ans=request.student_translation,
-            ai_result=result,
+    should_save = True
+
+    if result.get("correct_variant") == "Error processing answer":
+        should_save = False
+
+    if result.get("errors"):
+        for err in result.get("errors"):
+            err_type = err.get("type", "").lower()
+            if "error" in err_type or "system" in err_type:
+                should_save = False
+                break
+
+    if result.get("score") == 0 and result.get("main_topic") == "General":
+        if "Error" in result.get("correct_variant", ""):
+            should_save = False
+
+    if should_save:
+        try:
+            file_manager.update_journal(
+                task=request.original_task,
+                student_ans=request.student_translation,
+                ai_result=result,
+            )
+            file_manager.update_performance_table(ai_result=result)
+        except Exception as e:
+            print(f"Ошибка записи файлов: {e}")
+    else:
+        print(
+            "!!! ОБНАРУЖЕНА ОШИБКА AI. Запись в журнал отменена, чтобы не портить историю."
         )
-        file_manager.update_performance_table(ai_result=result)
-    except Exception as e:
-        print(f"Ошибка записи файлов: {e}")
 
     return CheckResponse(result=result)
 
