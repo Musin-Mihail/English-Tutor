@@ -24,11 +24,10 @@ class GraderResult(BaseModel):
 
 
 MASTER_PROMPT_TEXT = """
-Ты — AI-репетитор английского. Твоя задача — проверять переводы и генерировать задания.
+Ты — AI-репетитор английского.
+Твоя задача — проверять переводы и генерировать задания.
 ТВОЙ ЯЗЫК ОТВЕТОВ — СТРОГО РУССКИЙ.
-
 ВАЖНО: При проверке учитывай "Текущий уровень" студента из контекста. Не требуй знаний уровня C1, если студент A1.
-
 ФОРМАТ ОТВЕТА (JSON):
 РЕЖИМ 1: ПРОВЕРКА
 {
@@ -42,7 +41,8 @@ MASTER_PROMPT_TEXT = """
 }
 
 РЕЖИМ 2: ГЕНЕРАЦИЯ ЗАДАНИЯ
-Проанализируй таблицу. Найди темы с низким баллом или малым количеством оценок.
+Проанализируй таблицу.
+Найди темы с низким баллом или малым количеством оценок.
 Учитывай список "Активный словарный запас" — старайся использовать изученные слова + 1-2 новых.
 Верни JSON:
 {
@@ -53,8 +53,11 @@ MASTER_PROMPT_TEXT = """
 
 class GraderAgent:
     def __init__(
-        self, model_name: str = "gemini-3-flash-preview"
-    ):  # ЗАПРЕЩЕНО менять модель
+        # self, model_name: str = "gemini-3-flash-preview"
+        self,
+        model_name: str = "gemma-3-27b-it",
+    ):
+        print(f"--- INIT MODEL: {model_name} ---")
         self.model = genai.GenerativeModel(
             model_name=model_name,
             system_instruction=MASTER_PROMPT_TEXT,
@@ -81,7 +84,10 @@ class GraderAgent:
         {context_journal}
         """
         try:
+            print(f"\n[CHECK] Sending request to AI...")
             response = await self.model.generate_content_async(user_message)
+            print(f"[CHECK] Raw AI Response: {response.text}")
+
             parsed_response = json.loads(response.text)
 
             if isinstance(parsed_response, list):
@@ -92,6 +98,7 @@ class GraderAgent:
 
             return parsed_response
         except Exception as e:
+            print(f"!!! [CHECK] ERROR: {e}")
             return {
                 "score": 0,
                 "errors": [{"type": "Error", "explanation": str(e)}],
@@ -114,8 +121,12 @@ class GraderAgent:
         {context_journal}
         """
         try:
+            print(f"\n[NEXT] Sending request to AI for new task...")
             response = await self.model.generate_content_async(user_message)
+            print(f"[NEXT] Raw AI Response: {response.text}")
+
             data = json.loads(response.text)
             return data.get("next_task", "Переведи: У меня есть кот.")
-        except:
-            return "Переведи: У меня есть собака."
+        except Exception as e:
+            print(f"!!! [NEXT] ERROR generating task: {e}")
+            return "Переведи: У меня есть собака (Fallback)."
