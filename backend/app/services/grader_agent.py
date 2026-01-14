@@ -5,61 +5,49 @@ from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
 from app.core.config import settings
 
-# Configure the API Key
 if settings.GOOGLE_API_KEY:
     genai.configure(api_key=settings.GOOGLE_API_KEY)
 
 
-# 1. Define the Pydantic model for validation
 class GraderResult(BaseModel):
-    main_topic: str = Field(
-        description="The main grammatical topic from the performance table"
-    )
-    correct_variant: str = Field(description="The corrected version of the translation")
-    alternatives: list[str] = Field(
-        description="List of alternative correct translations"
-    )
-    score: int = Field(description="Score from 0 to 10")
+    main_topic: str = Field(description="Тема из таблицы успеваемости")
+    correct_variant: str = Field(description="Правильный перевод")
+    alternatives: list[str] = Field(description="Альтернативные варианты")
+    score: int = Field(description="Оценка от 0 до 10")
     errors: list[Dict[str, str]] = Field(
-        description="List of errors. Each error has 'type' and 'explanation'"
+        description="Список ошибок с типом и объяснением на русском"
     )
-    recommendation: str = Field(description="Recommendation for what to study next")
+    recommendation: str = Field(description="Рекомендация что повторить")
 
 
-# 2. Integrate your Master Prompt (Combined with JSON instructions)
 MASTER_PROMPT_TEXT = """
-You are an experienced English teacher specializing in helping Russian-speaking students. 
-Your task is to check my translations, grade them, find errors, and help me learn by adapting to my performance history.
+Ты — опытный преподаватель английского языка для русскоязычных студентов.
+Твоя задача — проверять переводы и создавать новые задания.
+ТВОЙ ЯЗЫК ОТВЕТОВ — СТРОГО РУССКИЙ (Russian).
 
-INPUT DATA:
-I will provide you with:
-1. The Task (Russian original).
-2. My Translation (English).
-3. Context: My Performance Table (topics I struggle with).
-4. Context: My Learning Journal (previous errors).
+ФОРМАТ ОТВЕТА (JSON):
+Ты всегда должен отвечать только валидным JSON объектом.
 
-ALGORITHM:
-1. Analyze the input. Compare my translation with the original.
-2. Provide feedback in a STRICT JSON format.
-
-JSON RESPONSE FORMAT:
-You must respond with a raw JSON object (no markdown formatting like ```json ... ```) matching this structure:
+РЕЖИМ 1: ПРОВЕРКА (Когда дано "Student Answer")
 {
-    "main_topic": "Specific topic from the provided Performance Table (e.g., 'Articles (a/an, the)')",
-    "correct_variant": "The best correct translation",
-    "alternatives": ["Other valid option 1", "Other valid option 2"],
-    "score": 0, // Integer 0-10
+    "main_topic": "Название темы из таблицы (например: 'Артикли')",
+    "correct_variant": "Исправленный английский текст",
+    "alternatives": ["Вариант 1", "Вариант 2"],
+    "score": 0, // Целое число 0-10
     "errors": [
         {
-            "type": "Grammar/Lexis/Style",
-            "explanation": "Concise explanation of the error."
+            "type": "Грамматика/Лексика",
+            "explanation": "Объяснение ошибки на русском языке."
         }
     ],
-    "recommendation": "Specific advice based on the errors made."
+    "recommendation": "Совет на русском языке."
 }
 
-TONE:
-Friendly and supportive, but strict regarding rules. Help me think like a native speaker.
+РЕЖИМ 2: ГЕНЕРАЦИЯ (Когда просят "GENERATE_TASK")
+В ответ верни JSON:
+{
+    "next_task": "Предложение на русском языке для перевода, основанное на слабых местах студента."
+}
 """
 
 
@@ -79,41 +67,50 @@ class GraderAgent:
         context_journal: Optional[str] = "",
     ) -> Dict[str, Any]:
 
-        # Construct the user message injecting the specific context files
         user_message = f"""
-        --- CURRENT TASK ---
-        **Task (Russian):** "{original_task}"
-        **Student Answer (English):** "{student_translation}"
+        --- РЕЖИМ ПРОВЕРКИ ---
+        **Задание (Русский):** "{original_task}"
+        **Ответ студента (English):** "{student_translation}"
         
-        --- CONTEXT: PERFORMANCE TABLE ---
-        {context_table if context_table else "No data provided."}
+        --- КОНТЕКСТ: УСПЕВАЕМОСТЬ ---
+        {context_table}
         
-        --- CONTEXT: LEARNING JOURNAL ---
-        {context_journal if context_journal else "No data provided."}
+        --- КОНТЕКСТ: ЖУРНАЛ ---
+        {context_journal}
         
-        Analyze the answer and return the JSON result.
+        Проверь перевод и верни JSON.
+        """
+        try:
+            response = await self.model.generate_content_async(user_message)
+            return json.loads(response.text)
+        except Exception as e:
+            return {"score": 0, "errors": [{"type": "Error", "explanation": str(e)}]}
+
+    async def generate_new_task(
+        self,
+        context_table: Optional[str] = "",
+        context_journal: Optional[str] = "",
+    ) -> str:
+
+        user_message = f"""
+        --- РЕЖИМ ГЕНЕРАЦИИ ---
+        Действие: GENERATE_TASK
+        
+        Проанализируй успеваемость студента:
+        {context_table}
+        
+        И его прошлые ошибки:
+        {context_journal}
+        
+        Придумай ОДНО предложение на русском языке для перевода на английский.
+        Оно должно тренировать самую слабую тему студента.
+        Верни JSON: {{"next_task": "..."}}
         """
 
         try:
-            # Call Gemini
             response = await self.model.generate_content_async(user_message)
-
-            # Parse JSON
-            result_json = json.loads(response.text)
-
-            # Validate with Pydantic
-            validated_result = GraderResult(**result_json)
-
-            return validated_result.model_dump()
-
+            data = json.loads(response.text)
+            return data.get("next_task", "Ошибка генерации задания.")
         except Exception as e:
-            # Fallback for errors
-            print(f"AI Error: {e}")
-            return {
-                "main_topic": "System Error",
-                "correct_variant": "Error processing request",
-                "alternatives": [],
-                "score": 0,
-                "errors": [{"type": "System", "explanation": str(e)}],
-                "recommendation": "Please check backend logs.",
-            }
+            print(f"Error generating task: {e}")
+            return "Переведи: У меня есть кот."

@@ -1,4 +1,4 @@
-import { Component, signal, inject } from '@angular/core';
+import { Component, signal, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -33,41 +33,58 @@ interface ChatMessage {
   templateUrl: './exercise-view.component.html',
   styleUrls: ['./exercise-view.component.scss'],
 })
-export class ExerciseViewComponent {
-  // Сигналы для управления состоянием
-  messages = signal<ChatMessage[]>([
-    {
-      role: 'teacher',
-      text: 'Привет! Давай потренируемся. Переведи следующее предложение:\n\n"Кошка спит на мягком диване."',
-    },
-  ]);
+export class ExerciseViewComponent implements OnInit {
+  messages = signal<ChatMessage[]>([]);
 
   userInput = signal<string>('');
   isBusy = signal<boolean>(false);
   private exerciseService = inject(ExerciseService);
 
-  // Метод отправки ответа
+  ngOnInit() {
+    this.loadNewTask();
+  }
+
+  async loadNewTask() {
+    this.isBusy.set(true);
+    this.messages.update((msgs) => [
+      ...msgs,
+      { role: 'teacher', text: 'Анализирую твою успеваемость и подбираю задание...' },
+    ]);
+
+    try {
+      const response = await firstValueFrom(this.exerciseService.getNextTask());
+
+      this.messages.update((msgs) => {
+        const newMsgs = msgs.slice(0, -1);
+        return [...newMsgs, { role: 'teacher', text: response.task_text }];
+      });
+    } catch (error) {
+      console.error('Error fetching task', error);
+      this.messages.update((msgs) => [
+        ...msgs,
+        { role: 'teacher', text: 'Не удалось загрузить задание. Проверь сервер.' },
+      ]);
+    } finally {
+      this.isBusy.set(false);
+    }
+  }
+
   async sendAnswer() {
     const text = this.userInput().trim();
     if (!text || this.isBusy()) return;
 
-    // Находим последнее сообщение учителя, чтобы понять, какое было задание
-    // (В реальном приложении ID задания хранят отдельно, но для чата пойдет)
     const lastTeacherMsg = [...this.messages()]
       .reverse()
       .find((m) => m.role === 'teacher' && !m.isEvaluation);
-    const taskText = lastTeacherMsg ? lastTeacherMsg.text : 'Translate this...';
+
+    const taskText = lastTeacherMsg ? lastTeacherMsg.text : '';
 
     this.updateChat('student', text);
     this.userInput.set('');
     this.isBusy.set(true);
 
     try {
-      // РЕАЛЬНЫЙ ВЫЗОВ НА БЕКЕНД
-      // Используем firstValueFrom для превращения Observable в Promise (удобнее с async/await)
       const response = await firstValueFrom(this.exerciseService.checkTranslation(text, taskText));
-
-      // response.result - это тот самый JSON от Gemini
       const aiData = response.result;
 
       this.messages.update((msgs) => [
@@ -80,10 +97,8 @@ export class ExerciseViewComponent {
         },
       ]);
 
-      this.updateChat('teacher', 'Следующее задание (пока заглушка)...');
+      await this.loadNewTask();
     } catch (error) {
-      console.error('Ошибка сервера:', error);
-      this.updateChat('teacher', 'Ошибка связи с сервером AI. Попробуй позже.');
     } finally {
       this.isBusy.set(false);
     }
