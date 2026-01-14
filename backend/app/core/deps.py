@@ -16,8 +16,9 @@ _grader_agent_instance = None
 def get_grader_agent() -> GraderAgent:
     global _grader_agent_instance
     if _grader_agent_instance is None:
-        # ИЗМЕНЕНИЕ ЗДЕСЬ: используем модель из твоего списка
-        _grader_agent_instance = GraderAgent(model_name="gemini-3-flash-preview")
+        # _grader_agent_instance = GraderAgent(model_name="gemini-3-flash-preview")
+        _grader_agent_instance = GraderAgent(model_name="gemma-3-27b-it")
+
     return _grader_agent_instance
 
 
