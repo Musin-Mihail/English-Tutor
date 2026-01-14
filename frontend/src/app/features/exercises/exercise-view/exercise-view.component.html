@@ -1,0 +1,71 @@
+<div class="chat-container">
+  <div class="messages-area">
+    @for (msg of messages(); track $index) {
+    <div class="message-row" [class.student-row]="msg.role === 'student'">
+      <div class="avatar" [class.teacher-avatar]="msg.role === 'teacher'">
+        <mat-icon>{{ msg.role === 'teacher' ? 'school' : 'person' }}</mat-icon>
+      </div>
+
+      <div class="bubble" [class.student-bubble]="msg.role === 'student'">
+        @if (!msg.isEvaluation) {
+        <p>{{ msg.text }}</p>
+        } @if (msg.isEvaluation && msg.evaluationData) {
+        <div class="evaluation-card">
+          <div class="score-badge" [class.high-score]="msg.evaluationData.score >= 8">
+            {{ msg.evaluationData.score }}/10
+          </div>
+          <h3>{{ msg.evaluationData.main_topic }}</h3>
+
+          <div class="correction">
+            <strong>Correct:</strong> {{ msg.evaluationData.correct_variant }}
+          </div>
+
+          @if (msg.evaluationData.errors.length > 0) {
+          <ul class="errors-list">
+            @for (err of msg.evaluationData.errors; track $index) {
+            <li>
+              <span class="err-type">{{ err.type }}:</span> {{ err.explanation }}
+            </li>
+            }
+          </ul>
+          }
+
+          <div class="recommendation">
+            <mat-icon inline>lightbulb</mat-icon>
+            {{ msg.evaluationData.recommendation }}
+          </div>
+        </div>
+        }
+      </div>
+    </div>
+    } @if (isBusy()) {
+    <div class="message-row">
+      <div class="avatar teacher-avatar"><mat-icon>school</mat-icon></div>
+      <div class="bubble typing-indicator"><span>.</span><span>.</span><span>.</span></div>
+    </div>
+    }
+  </div>
+
+  <div class="input-area">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Your translation...</mat-label>
+      <textarea
+        matInput
+        [(ngModel)]="userInput"
+        [disabled]="isBusy()"
+        (keydown)="onKeyDown($event)"
+        rows="2"
+      ></textarea>
+      <button
+        mat-icon-button
+        matSuffix
+        color="primary"
+        (click)="sendAnswer()"
+        [disabled]="!userInput() || isBusy()"
+      >
+        <mat-icon>send</mat-icon>
+      </button>
+    </mat-form-field>
+    <div class="hint">Press Ctrl+Enter to send</div>
+  </div>
+</div>

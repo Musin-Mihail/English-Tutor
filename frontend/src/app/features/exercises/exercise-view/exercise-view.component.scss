@@ -1,0 +1,138 @@
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-width: 900px;
+  margin: 0 auto;
+  background-color: #f5f7fa;
+}
+
+.messages-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.message-row {
+  display: flex;
+  gap: 12px;
+  max-width: 80%;
+
+  &.student-row {
+    align-self: flex-end;
+    flex-direction: row-reverse;
+  }
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #e0e0e0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #555;
+
+  &.teacher-avatar {
+    background-color: #673ab7; // Deep Purple
+    color: white;
+  }
+}
+
+.bubble {
+  background-color: white;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  font-size: 1rem;
+  line-height: 1.5;
+  border-top-left-radius: 2px; // "Хвостик" слева для учителя
+
+  &.student-bubble {
+    background-color: #e3f2fd; // Light Blue
+    border-top-left-radius: 12px;
+    border-top-right-radius: 2px; // "Хвостик" справа для студента
+  }
+}
+
+// Стили для карточки оценки внутри пузыря
+.evaluation-card {
+  min-width: 300px;
+
+  h3 {
+    margin: 0 0 8px 0;
+    font-size: 1.1rem;
+    color: #333;
+  }
+
+  .score-badge {
+    float: right;
+    background: #ff9800;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 0.9rem;
+
+    &.high-score {
+      background: #4caf50;
+    }
+  }
+
+  .correction {
+    background: #f0f4c3;
+    padding: 8px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+    color: #33691e;
+  }
+
+  .errors-list {
+    padding-left: 20px;
+    margin-bottom: 12px;
+
+    li {
+      margin-bottom: 4px;
+    }
+
+    .err-type {
+      font-weight: bold;
+      color: #d32f2f;
+    }
+  }
+
+  .recommendation {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #0277bd;
+    font-style: italic;
+  }
+}
+
+.input-area {
+  padding: 20px;
+  background-color: white;
+  border-top: 1px solid #ddd;
+
+  .full-width {
+    width: 100%;
+  }
+
+  .hint {
+    font-size: 0.8rem;
+    color: #999;
+    text-align: right;
+    margin-top: -16px;
+  }
+}
+
+.typing-indicator {
+  color: #999;
+  letter-spacing: 2px;
+  font-weight: bold;
+}
