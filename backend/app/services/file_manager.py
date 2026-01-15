@@ -145,8 +145,8 @@ class FileManager:
                     )
 
                     new_section = re.sub(
-                        r"\*\*Средний балл.*?\n",
-                        f"**Средний балл (из 10):** {avg_score}\n",
+                        r"(\*\*Средний балл.*?:\*\*).*",
+                        rf"\1 {avg_score}",
                         new_section,
                         count=1,
                     )
