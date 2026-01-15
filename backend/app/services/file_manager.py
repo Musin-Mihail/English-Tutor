@@ -1,6 +1,5 @@
 import os
 import re
-import datetime
 from typing import List, Dict
 
 
@@ -34,7 +33,6 @@ class FileManager:
         if not ai_result:
             return
 
-        today = datetime.date.today().strftime("%d.%m.%Y")
         errors_list = ai_result.get("errors", [])
         errors_text = ""
         if isinstance(errors_list, list):
@@ -55,7 +53,7 @@ class FileManager:
         new_voc_str = ", ".join(new_voc_list)
 
         new_entry = f"""
-### Задание - {today}
+### Задание
 
 **Задание (Русский):**
 {task}
@@ -107,7 +105,6 @@ class FileManager:
                     content = content.replace(voc_match.group(0), updated_line)
 
         score = ai_result.get("score", 0)
-        today = datetime.date.today().strftime("%d.%m.%Y")
 
         try:
             safe_topic = re.escape(topic.strip())
@@ -150,17 +147,6 @@ class FileManager:
                     new_section = re.sub(
                         r"\*\*Средний балл.*?\n",
                         f"**Средний балл (из 10):** {avg_score}\n",
-                        new_section,
-                        count=1,
-                    )
-
-                    new_section = re.sub(
-                        r"\*\*Даты проверок:\*\* (.*)",
-                        lambda m: (
-                            f"**Даты проверок:** {m.group(1)}, {today}"
-                            if m.group(1).strip()
-                            else f"**Даты проверок:** {today}"
-                        ),
                         new_section,
                         count=1,
                     )
