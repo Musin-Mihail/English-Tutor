@@ -30,30 +30,42 @@ MASTER_PROMPT_TEXT = """
 
 РЕЖИМ 1: ПРОВЕРКА (Когда есть Student Answer)
 {
-    "main_topic": "Тема из таблицы (ОБЯЗАТЕЛЬНО выбирай тему, к которой относится грамматика предложения)",
-    "correct_variant": "Английский перевод",
+    "main_topic": "ТОЧНОЕ название темы из таблицы",
+    "correct_variant": "Правильный английский перевод",
     "alternatives": ["Вариант 2"],
-    "score": 8,
+    "score": 6,
     "errors": [{"type": "Грамматика", "explanation": "..."}],
     "recommendation": "...",
-    "new_vocabulary": ["word1", "word2 - перевод"]
+    "new_vocabulary": ["word - перевод"]
 }
+
+ПРАВИЛА ЗАПОЛНЕНИЯ ПРИ ПРОВЕРКЕ:
+1. main_topic (Тема):
+   - Ты ОБЯЗАН выбрать тему СТРОГО из заголовков "Context Table" (например: "Времена Past (Simple vs. Cont. vs. Perf.)").
+   - ПРИОРИТЕТ: Если в предложении есть глагол в прошедшем времени, ГЛАВНАЯ тема — это "Времена Past...", а не "Предлоги" или "Артикли". Грамматика важнее лексики!
+   - Копируй название темы буква в букву (включая скобки).
+
+2. new_vocabulary (Словарь):
+   - Включай сюда ТОЛЬКО слова из поля "correct_variant" (твоего правильного перевода).
+   - ЗАПРЕЩЕНО добавлять слова с опечатками из ответа студента (например, если студент написал "yestudey", НЕ добавляй это).
+   - Формат: "english_word - русский перевод".
+
+3. CRITICAL RULE (ЯЗЫК):     
+- Если ответ студента (Student Answer) написан на РУССКОМ языке (кириллицей), 
+    ты ОБЯЗАН поставить "score": 0 и вернуть ошибку "Не переведено".
+- Даже если смысл правильный, но язык русский — оценка 0.
 
 РЕЖИМ 2: ГЕНЕРАЦИЯ ЗАДАНИЯ (Action: GENERATE_TASK)
 Твоя задача — придумать ОДНО НОВОЕ предложение НА РУССКОМ ЯЗЫКЕ.
 
-АЛГОРИТМ ВЫБОРА ТЕМЫ (СТРОГО):
-1. Посмотри в Context Table.
-2. Найди темы, где "Все оценки" пусты или "Средний балл" равен 0.0 (например: Past Simple, Future, Conditionals).
-3. ПРИОРИТЕТ: Если есть темы с 0 оценок — СГЕНЕРИРУЙ ЗАДАНИЕ ПО НИМ. Не зацикливайся на Present Simple.
-4. Если все темы начаты, выбирай ту, где самый низкий балл.
+АЛГОРИТМ ВЫБОРА ТЕМЫ:
+1. Найди в Context Table темы, где "Все оценки" пусты или "Средний балл" равен 0.0.
+2. СГЕНЕРИРУЙ задание именно на эту тему, чтобы заполнить пробелы.
+3. Пример: Если "Времена Past" пустые — дай предложение "Вчера я ходил в кино".
 
 ЗАПРЕЩЕНО: Давать задания в духе "Составь предложение...".
-ЗАПРЕЩЕНО: Повторять то же самое предложение, что и в прошлый раз.
+ЗАПРЕЩЕНО: Повторять предыдущее задание.
 НУЖНО: Просто дать русское предложение.
-
-Пример для темы Past Simple: "Вчера я ходил в парк."
-Пример для темы Future Simple: "Завтра мы пойдем в кино."
 
 Верни JSON:
 {
@@ -68,21 +80,16 @@ class GraderAgent:
         self.model = genai.GenerativeModel(model_name=model_name)
 
     def _clean_json_response(self, text: str) -> str:
-        """Мощная очистка JSON от Markdown и лишнего текста"""
         text = text.strip()
-
         match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
         if match:
             return match.group(1)
-
         match = re.search(r"(\{.*\})", text, re.DOTALL)
         if match:
             return match.group(1)
-
         return text
 
     def _ensure_schema(self, data: Dict) -> Dict:
-        """Гарантирует, что все поля есть"""
         return {
             "main_topic": data.get("main_topic", "General"),
             "correct_variant": data.get("correct_variant", ""),
@@ -108,7 +115,19 @@ class GraderAgent:
         Original Task (Russian): "{original_task}"
         Student Answer (English): "{student_translation}"
         
-        CONTEXT TABLE:
+        CONTEXT TABLE HEADERS (Use one of these EXACTLY):
+        - Артикли (a/an, the)
+        - Предлоги (in, on, at, for)
+        - Времена Present (Simple vs. Cont.)
+        - Времена Past (Simple vs. Cont. vs. Perf.)
+        - Неправильные глаголы
+        - Порядок слов в предложении
+        - Модальные глаголы
+        - Условные предложения (Conditionals)
+        - Фразовые глаголы
+        - Косвенная речь (Reported Speech)
+        
+        FULL CONTEXT TABLE:
         {context_table}
         """
         try:
@@ -123,8 +142,7 @@ class GraderAgent:
             if isinstance(parsed_response, list):
                 parsed_response = parsed_response[0] if parsed_response else {}
 
-            final_data = self._ensure_schema(parsed_response)
-            return final_data
+            return self._ensure_schema(parsed_response)
 
         except Exception as e:
             print(f"!!! [CHECK] ERROR: {e}")
@@ -151,9 +169,8 @@ class GraderAgent:
             )
             if matches:
                 forbidden_task = matches[-1].strip()
-                print(f"[ANTILOOP] Forbidden task identified: '{forbidden_task}'")
-        except Exception as e:
-            print(f"[ANTILOOP] Error extracting last task: {e}")
+        except Exception:
+            pass
 
         anti_repeat_instruction = ""
         if forbidden_task:
@@ -188,13 +205,10 @@ class GraderAgent:
             task = data.get("next_task", "Переведи: У меня есть кот.")
 
             if forbidden_task and task.strip() == forbidden_task:
-                print(
-                    "!!! AI repeated the task despite instructions. Retrying logic..."
-                )
-                return "Вчера я видел большую собаку."
+                return "Вчера я ходил в магазин."
 
             return task
 
         except Exception as e:
             print(f"!!! [NEXT] ERROR generating task: {e}")
-            return "Вчера я ходил в парк."
+            return "Вчера я играл в футбол."
