@@ -1,13 +1,11 @@
 import json
 import re
 import os
-import google.generativeai as genai
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
 from app.core.config import settings
-
-if settings.GOOGLE_API_KEY:
-    genai.configure(api_key=settings.GOOGLE_API_KEY)
+from google import genai
+from google.genai import types
 
 
 class GraderResult(BaseModel):
@@ -21,9 +19,9 @@ class GraderResult(BaseModel):
 
 
 MASTER_PROMPT_TEXT = """
-Ты — AI-репетитор. Твоя роль — строго помогать с ПЕРЕВОДОМ.
+Ты — AI-репетитор.
+Твоя роль — строго помогать с ПЕРЕВОДОМ.
 ТВОЙ ЯЗЫК ОТВЕТОВ — СТРОГО РУССКИЙ.
-
 ФОРМАТ ОТВЕТА (JSON):
 Ты ОБЯЗАН вернуть ТОЛЬКО чистый JSON объект. 
 Не используй markdown форматирование.
@@ -41,32 +39,17 @@ MASTER_PROMPT_TEXT = """
 
 ПРАВИЛА ЗАПОЛНЕНИЯ ПРИ ПРОВЕРКЕ:
 1. main_topic (Тема):
-   - Ты ОБЯЗАН выбрать тему СТРОГО из заголовков "Context Table" (например: "Времена Past (Simple vs. Cont. vs. Perf.)").
-   - ПРИОРИТЕТ: Если в предложении есть глагол в прошедшем времени, ГЛАВНАЯ тема — это "Времена Past...", а не "Предлоги" или "Артикли". Грамматика важнее лексики!
-   - Копируй название темы буква в букву (включая скобки).
-
+   - Ты ОБЯЗАН выбрать тему СТРОГО из заголовков "Context Table".
+   - ПРИОРИТЕТ: Грамматика важнее лексики!
 2. new_vocabulary (Словарь):
-   - Включай сюда ТОЛЬКО слова из поля "correct_variant" (твоего правильного перевода).
-   - ЗАПРЕЩЕНО добавлять слова с опечатками из ответа студента (например, если студент написал "yestudey", НЕ добавляй это).
+   - Включай сюда ТОЛЬКО слова из поля "correct_variant".
    - Формат: "english_word - русский перевод".
-
 3. CRITICAL RULE (ЯЗЫК):     
-- Если ответ студента (Student Answer) написан на РУССКОМ языке (кириллицей), 
-    ты ОБЯЗАН поставить "score": 0 и вернуть ошибку "Не переведено".
-- Даже если смысл правильный, но язык русский — оценка 0.
+   - Если ответ студента на РУССКОМ языке (кириллицей) -> "score": 0.
 
 РЕЖИМ 2: ГЕНЕРАЦИЯ ЗАДАНИЯ (Action: GENERATE_TASK)
 Твоя задача — придумать ОДНО НОВОЕ предложение НА РУССКОМ ЯЗЫКЕ.
-
-АЛГОРИТМ ВЫБОРА ТЕМЫ:
-1. Найди в Context Table темы, где "Все оценки" пусты или "Средний балл" равен 0.0.
-2. СГЕНЕРИРУЙ задание именно на эту тему, чтобы заполнить пробелы.
-3. Пример: Если "Времена Past" пустые — дай предложение "Вчера я ходил в кино".
-
-ЗАПРЕЩЕНО: Давать задания в духе "Составь предложение...".
-ЗАПРЕЩЕНО: Повторять предыдущее задание.
-НУЖНО: Просто дать русское предложение.
-
+Найди в Context Table темы, где "Средний балл" равен 0.0, и дай задание на эту тему.
 Верни JSON:
 {
     "next_task": "Текст предложения на русском..."
@@ -76,8 +59,9 @@ MASTER_PROMPT_TEXT = """
 
 class GraderAgent:
     def __init__(self, model_name: str = "gemma-3-27b-it"):
-        print(f"--- INIT MODEL: {model_name} ---")
-        self.model = genai.GenerativeModel(model_name=model_name)
+        print(f"--- INIT MODEL (New SDK): {model_name} ---")
+        self.model_name = model_name
+        self.client = genai.Client(api_key=settings.GOOGLE_API_KEY)
 
     def _clean_json_response(self, text: str) -> str:
         text = text.strip()
@@ -109,29 +93,18 @@ class GraderAgent:
     ) -> Dict[str, Any]:
         user_message = f"""
         {MASTER_PROMPT_TEXT}
-
         --- РЕЖИМ: ПРОВЕРКА ---
         Original Task (Russian): "{original_task}"
         Student Answer (English): "{student_translation}"
         
-        CONTEXT TABLE HEADERS (Use one of these EXACTLY):
-        - Артикли (a/an, the)
-        - Предлоги (in, on, at, for)
-        - Времена Present (Simple vs. Cont.)
-        - Времена Past (Simple vs. Cont. vs. Perf.)
-        - Неправильные глаголы
-        - Порядок слов в предложении
-        - Модальные глаголы
-        - Условные предложения (Conditionals)
-        - Фразовые глаголы
-        - Косвенная речь (Reported Speech)
-        
-        FULL CONTEXT TABLE:
+        CONTEXT TABLE:
         {context_table}
         """
         try:
-            print(f"\n[CHECK] Sending request to AI...")
-            response = await self.model.generate_content_async(user_message)
+            print(f"\n[CHECK] Sending request to AI ({self.model_name})...")
+            response = await self.client.aio.models.generate_content(
+                model=self.model_name, contents=user_message
+            )
             raw_text = response.text
             print(f"[CHECK] Raw AI Response: {raw_text}")
             clean_text = self._clean_json_response(raw_text)
@@ -168,9 +141,10 @@ class GraderAgent:
         anti_repeat_instruction = ""
         if forbidden_task:
             anti_repeat_instruction = f"""
-            CRITICAL RULE: DO NOT GENERATE THE PHRASE: "{forbidden_task}". 
+            CRITICAL RULE: DO NOT GENERATE THE PHRASE: "{forbidden_task}".
             You MUST generate a DIFFERENT sentence.
             """
+
         user_message = f"""
         {MASTER_PROMPT_TEXT}
 
@@ -186,8 +160,10 @@ class GraderAgent:
         {context_journal}
         """
         try:
-            print(f"\n[NEXT] Sending request to AI for new task...")
-            response = await self.model.generate_content_async(user_message)
+            print(f"\n[NEXT] Sending request to AI ({self.model_name}) for new task...")
+            response = await self.client.aio.models.generate_content(
+                model=self.model_name, contents=user_message
+            )
             raw_text = response.text
             print(f"[NEXT] Raw AI Response: {raw_text}")
             clean_text = self._clean_json_response(raw_text)
