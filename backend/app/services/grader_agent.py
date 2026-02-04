@@ -107,7 +107,6 @@ class GraderAgent:
         context_table: Optional[str] = "",
         context_journal: Optional[str] = "",
     ) -> Dict[str, Any]:
-
         user_message = f"""
         {MASTER_PROMPT_TEXT}
 
@@ -135,15 +134,11 @@ class GraderAgent:
             response = await self.model.generate_content_async(user_message)
             raw_text = response.text
             print(f"[CHECK] Raw AI Response: {raw_text}")
-
             clean_text = self._clean_json_response(raw_text)
             parsed_response = json.loads(clean_text)
-
             if isinstance(parsed_response, list):
                 parsed_response = parsed_response[0] if parsed_response else {}
-
             return self._ensure_schema(parsed_response)
-
         except Exception as e:
             print(f"!!! [CHECK] ERROR: {e}")
             return {
@@ -161,7 +156,6 @@ class GraderAgent:
         context_table: Optional[str] = "",
         context_journal: Optional[str] = "",
     ) -> str:
-
         forbidden_task = ""
         try:
             matches = re.findall(
@@ -171,14 +165,12 @@ class GraderAgent:
                 forbidden_task = matches[-1].strip()
         except Exception:
             pass
-
         anti_repeat_instruction = ""
         if forbidden_task:
             anti_repeat_instruction = f"""
             CRITICAL RULE: DO NOT GENERATE THE PHRASE: "{forbidden_task}". 
             You MUST generate a DIFFERENT sentence.
             """
-
         user_message = f"""
         {MASTER_PROMPT_TEXT}
 
@@ -198,17 +190,12 @@ class GraderAgent:
             response = await self.model.generate_content_async(user_message)
             raw_text = response.text
             print(f"[NEXT] Raw AI Response: {raw_text}")
-
             clean_text = self._clean_json_response(raw_text)
             data = json.loads(clean_text)
-
             task = data.get("next_task", "Переведи: У меня есть кот.")
-
             if forbidden_task and task.strip() == forbidden_task:
                 return "Вчера я ходил в магазин."
-
             return task
-
         except Exception as e:
             print(f"!!! [NEXT] ERROR generating task: {e}")
             return "Вчера я играл в футбол."

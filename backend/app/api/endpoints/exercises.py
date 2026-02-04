@@ -11,30 +11,24 @@ file_manager = FileManager()
 @router.post("/check", response_model=CheckResponse)
 async def check_translation(request: TranslationRequest):
     table_content, journal_content = file_manager.get_context()
-
     result = await agent.grade_translation(
         student_translation=request.student_translation,
         original_task=request.original_task,
         context_table=table_content,
         context_journal=journal_content,
     )
-
     should_save = True
-
     if result.get("correct_variant") == "Error processing answer":
         should_save = False
-
     if result.get("errors"):
         for err in result.get("errors"):
             err_type = err.get("type", "").lower()
             if "error" in err_type or "system" in err_type:
                 should_save = False
                 break
-
     if result.get("score") == 0 and result.get("main_topic") == "General":
         if "Error" in result.get("correct_variant", ""):
             should_save = False
-
     if should_save:
         try:
             file_manager.update_journal(
@@ -57,7 +51,6 @@ async def check_translation(request: TranslationRequest):
 async def get_next_task():
     try:
         table_content, journal_content = file_manager.get_context()
-
         task_text = await agent.generate_new_task(
             context_table=table_content, context_journal=journal_content
         )

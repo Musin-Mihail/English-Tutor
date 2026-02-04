@@ -99,7 +99,6 @@ The doctor work a big hospital. The red dog play in the park.
 - **Правильно:** The doctor works in a big hospital. The red dog plays in the park.
 - **Оценка:** 5/10
 - **Разбор ошибок:**
-
   - **Грамматика - Present Simple:** Для подлежащих в третьем лице единственном числе (The doctor - он, The dog - она/оно) к глаголу в настоящем времени нужно добавлять окончание -s: works, plays.
   - **Грамматика - Предлоги:** Пропущен предлог места 'in' перед словосочетанием 'a big hospital'. Правильно: works in a big hospital.
 
@@ -122,7 +121,6 @@ The small cat lives in the house. The doctor now in the hospital. The red ball i
 - **Правильно:** The small cat lives in the house. The doctor is in the hospital now. The red ball is on the table.
 - **Оценка:** 6/10
 - **Разбор ошибок:**
-
   - **Грамматика - Глагол-связка:** В английском языке в предложении обязательно должен быть глагол. В предложениях 'The doctor... in the hospital' и 'The red ball... in the table' пропущено слово 'is' (есть/находится).
   - **Грамматика - Предлоги:** Ты использовал предлог 'in' для мяча на столе. 'In' означает 'внутри' (в столе), а для значения 'на поверхности' нужно использовать 'on'.
 
@@ -145,7 +143,6 @@ The green cat plays on the big table now. The doctor works in the park.
 - **Правильно:** The green cat is playing on the big table now. The doctor works in the park.
 - **Оценка:** 8/10
 - **Разбор ошибок:**
-
   - **Грамматика - Present Continuous:** Слово 'now' (сейчас) указывает на действие, которое происходит в момент речи. В таких случаях нужно использовать Present Continuous (am/is/are + глагол с -ing). Правильно: 'is playing'.
 
 - **Рекомендация:** Ты отлично справился с артиклями и окончанием -s во втором предложении! Чтобы улучшить результат, запомни: если действие происходит прямо сейчас (маркер 'now'), используй форму 'is/am/are + -ing'.
@@ -167,7 +164,6 @@ My frend playing small dog in the garden.The red лежитing in the big box on
 - **Правильно:** My friend is playing with a small dog in the garden. The red ball is in the big box on the table.
 - **Оценка:** 3/10
 - **Разбор ошибок:**
-
   - **Орфография:** Слово 'friend' (друг) пишется с буквой 'i'.
   - **Грамматика - Вспомогательный глагол:** Для настоящего продолженного времени (Present Continuous) обязательно нужен глагол-связка 'is' перед 'playing'.
   - **Грамматика - Пропуск слов:** После 'playing' пропущен предлог 'with' (с) и артикль 'a' перед 'small dog'. Правильно: 'playing with a small dog'.
