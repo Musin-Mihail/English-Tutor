@@ -1,5 +1,6 @@
 import os
-import uvicorn
+
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,6 +13,7 @@ if PROXY_URL:
 else:
     print("--- No Proxy Settings found, running directly ---")
 if __name__ == "__main__":
-    uvicorn.run(
-        "app.main:app", host="0.0.0.0", port=8000, reload=True, log_level="info"
-    )
+    from app.ui import build_ui
+
+    demo = build_ui()
+    demo.launch(server_name="0.0.0.0", server_port=8000)

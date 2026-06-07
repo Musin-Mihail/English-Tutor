@@ -26,7 +26,8 @@ MASTER_PROMPT_TEXT = """
 Ты ОБЯЗАН вернуть ТОЛЬКО чистый JSON объект. 
 Не используй markdown форматирование.
 
-РЕЖИМ 1: ПРОВЕРКА (Когда есть Student Answer)
+РЕЖИМ 1: ПРОВЕРКА (Когда переданы аудиофайлы Student Answer)
+Студент произнес перевод в прикрепленных аудиофайлах. Распознай текст, проверь правильность и оцени произношение.
 {
     "main_topic": "ТОЧНОЕ название темы из таблицы",
     "correct_variant": "Правильный английский перевод",
@@ -44,12 +45,14 @@ MASTER_PROMPT_TEXT = """
 2. new_vocabulary (Словарь):
    - Включай сюда ТОЛЬКО слова из поля "correct_variant".
    - Формат: "english_word - русский перевод".
-3. CRITICAL RULE (ЯЗЫК):     
-   - Если ответ студента на РУССКОМ языке (кириллицей) -> "score": 0.
+3. CRITICAL RULE (ЯЗЫК И АУДИО):     
+   - Если ответ на русском языке или аудио пустые -> "score": 0.
+   - Укажи ошибки произношения в массиве errors, если они есть.
 
 РЕЖИМ 2: ГЕНЕРАЦИЯ ЗАДАНИЯ (Action: GENERATE_TASK)
-Твоя задача — придумать ОДНО НОВОЕ предложение НА РУССКОМ ЯЗЫКЕ.
-Найди в Context Table темы, где "Средний балл" равен 0.0, и дай задание на эту тему.
+Твоя задача — придумать 5 НОВЫХ предложений НА РУССКОМ ЯЗЫКЕ.
+Найди в Context Table темы, где "Средний балл" самый низкий.
+Каждое предложение выводи с новой строки (1., 2. и т.д.).
 Верни JSON:
 {
     "next_task": "Текст предложения на русском..."
@@ -58,7 +61,7 @@ MASTER_PROMPT_TEXT = """
 
 
 class GraderAgent:
-    def __init__(self, model_name: str = "gemma-3-27b-it"):
+    def __init__(self, model_name: str = "gemini-3-flash-preview"):
         print(f"--- INIT MODEL (New SDK): {model_name} ---")
         self.model_name = model_name
         self.client = genai.Client(api_key=settings.GOOGLE_API_KEY)
@@ -86,7 +89,7 @@ class GraderAgent:
 
     async def grade_translation(
         self,
-        student_translation: str,
+        audio_paths: list[str],
         original_task: str,
         context_table: Optional[str] = "",
         context_journal: Optional[str] = "",
@@ -95,15 +98,20 @@ class GraderAgent:
         {MASTER_PROMPT_TEXT}
         --- РЕЖИМ: ПРОВЕРКА ---
         Original Task (Russian): "{original_task}"
-        Student Answer (English): "{student_translation}"
         
         CONTEXT TABLE:
         {context_table}
         """
+        contents_list = [user_message]
         try:
+            for path in audio_paths:
+                if os.path.exists(path):
+                    uploaded_file = self.client.files.upload(file=path)
+                    contents_list.append(uploaded_file)
+
             print(f"\n[CHECK] Sending request to AI ({self.model_name})...")
             response = await self.client.aio.models.generate_content(
-                model=self.model_name, contents=user_message
+                model=self.model_name, contents=contents_list
             )
             raw_text = response.text
             print(f"[CHECK] Raw AI Response: {raw_text}")
