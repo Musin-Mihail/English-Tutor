@@ -119,24 +119,42 @@ class GraderAgent:
             parsed_response = json.loads(clean_text)
             if isinstance(parsed_response, list):
                 parsed_response = parsed_response[0] if parsed_response else {}
-            return self._ensure_schema(parsed_response)
+
+            input_tokens = (
+                response.usage_metadata.prompt_token_count
+                if response.usage_metadata
+                else 0
+            )
+            output_tokens = (
+                response.usage_metadata.candidates_token_count
+                if response.usage_metadata
+                else 0
+            )
+
+            return {
+                "result": self._ensure_schema(parsed_response),
+                "tokens": {"input": input_tokens, "output": output_tokens},
+            }
         except Exception as e:
             print(f"!!! [CHECK] ERROR: {e}")
             return {
-                "score": 0,
-                "errors": [{"type": "System Error", "explanation": str(e)}],
-                "main_topic": "General",
-                "correct_variant": "Error processing answer",
-                "alternatives": [],
-                "recommendation": "Try again later",
-                "new_vocabulary": [],
+                "result": {
+                    "score": 0,
+                    "errors": [{"type": "System Error", "explanation": str(e)}],
+                    "main_topic": "General",
+                    "correct_variant": "Error processing answer",
+                    "alternatives": [],
+                    "recommendation": "Try again later",
+                    "new_vocabulary": [],
+                },
+                "tokens": {"input": 0, "output": 0},
             }
 
     async def generate_new_task(
         self,
         context_table: Optional[str] = "",
         context_journal: Optional[str] = "",
-    ) -> str:
+    ) -> Dict[str, Any]:
         forbidden_task = ""
         try:
             matches = re.findall(
@@ -178,8 +196,26 @@ class GraderAgent:
             data = json.loads(clean_text)
             task = data.get("next_task", "Переведи: У меня есть кот.")
             if forbidden_task and task.strip() == forbidden_task:
-                return "Вчера я ходил в магазин."
-            return task
+                task = "Вчера я ходил в магазин."
+
+            input_tokens = (
+                response.usage_metadata.prompt_token_count
+                if response.usage_metadata
+                else 0
+            )
+            output_tokens = (
+                response.usage_metadata.candidates_token_count
+                if response.usage_metadata
+                else 0
+            )
+
+            return {
+                "result": task,
+                "tokens": {"input": input_tokens, "output": output_tokens},
+            }
         except Exception as e:
             print(f"!!! [NEXT] ERROR generating task: {e}")
-            return "Вчера я играл в футбол."
+            return {
+                "result": "Вчера я играл в футбол.",
+                "tokens": {"input": 0, "output": 0},
+            }

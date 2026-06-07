@@ -1,4 +1,6 @@
+import os
 import json
+import shutil
 from datetime import datetime
 from typing import List, Dict, Optional
 from sqlalchemy import (
@@ -51,6 +53,8 @@ class Journal(Base):
 
 class DatabaseManager:
     def __init__(self, db_url="sqlite:///app/data/tutor.db"):
+        self.audio_dir = "app/data/audio_records"
+        os.makedirs(self.audio_dir, exist_ok=True)
         self.engine = create_engine(db_url, connect_args={"check_same_thread": False})
         Base.metadata.create_all(self.engine)
         self.SessionLocal = sessionmaker(
@@ -114,10 +118,18 @@ class DatabaseManager:
     def add_journal_entry(
         self, task_id: int, audio_paths: List[str], ai_feedback: Dict, score: float
     ):
+        saved_audio_paths = []
+        for path in audio_paths:
+            if os.path.exists(path):
+                filename = f"{datetime.now().strftime('%Y%m%d%H%M%S%f')}_{os.path.basename(path)}"
+                dest_path = os.path.join(self.audio_dir, filename)
+                shutil.copy2(path, dest_path)
+                saved_audio_paths.append(dest_path)
+
         with self.SessionLocal() as session:
             journal = Journal(
                 task_id=task_id,
-                student_audio_paths=json.dumps(audio_paths, ensure_ascii=False),
+                student_audio_paths=json.dumps(saved_audio_paths, ensure_ascii=False),
                 ai_feedback=json.dumps(ai_feedback, ensure_ascii=False),
                 score=score,
             )
@@ -152,3 +164,37 @@ class DatabaseManager:
             topic.active_vocabulary = json.dumps(vocab, ensure_ascii=False)
 
             session.commit()
+
+    def get_all_performance(self):
+        with self.SessionLocal() as session:
+            topics = session.query(UserPerformance).all()
+            result = []
+            for t in topics:
+                vocab_list = (
+                    json.loads(t.active_vocabulary) if t.active_vocabulary else []
+                )
+                vocab_str = ", ".join(vocab_list)
+                result.append([t.topic_name, t.average_score, vocab_str])
+            return result
+
+    def get_journal_history_full(self):
+        with self.SessionLocal() as session:
+            journals = session.query(Journal).order_by(Journal.created_at.desc()).all()
+            result = []
+            for j in journals:
+                task_text = j.task.russian_text if j.task else "Unknown"
+                audio_paths = (
+                    json.loads(j.student_audio_paths) if j.student_audio_paths else []
+                )
+                ai_feedback = json.loads(j.ai_feedback) if j.ai_feedback else {}
+                result.append(
+                    {
+                        "id": j.id,
+                        "task_text": task_text,
+                        "created_at": j.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                        "audio_paths": audio_paths,
+                        "ai_feedback": ai_feedback,
+                        "score": j.score,
+                    }
+                )
+            return result
