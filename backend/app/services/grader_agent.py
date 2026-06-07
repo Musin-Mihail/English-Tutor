@@ -8,14 +8,23 @@ from google import genai
 from google.genai import types
 
 
-class GraderResult(BaseModel):
-    main_topic: str = Field(description="Тема из таблицы")
+class SentenceFeedback(BaseModel):
+    sentence_number: int = Field(description="Номер предложения")
+    student_transcription: str = Field(
+        description="То, что сказал студент (распознанный текст)"
+    )
     correct_variant: str = Field(description="Правильный перевод")
     alternatives: list[str] = Field(description="Альтернативы")
-    score: int = Field(description="Оценка")
     errors: list[Dict[str, str]] = Field(description="Список ошибок")
+
+
+class GraderResult(BaseModel):
+    main_topic: str = Field(description="Тема из таблицы")
+    score: int = Field(description="Оценка")
+    sentences_feedback: list[SentenceFeedback] = Field(
+        description="Фидбек по каждому предложению"
+    )
     recommendation: str = Field(description="Рекомендация")
-    new_vocabulary: list[str] = Field(description="Новые слова")
 
 
 MASTER_PROMPT_TEXT = """
@@ -27,27 +36,33 @@ MASTER_PROMPT_TEXT = """
 Не используй markdown форматирование.
 
 РЕЖИМ 1: ПРОВЕРКА (Когда переданы аудиофайлы Student Answer)
-Студент произнес перевод в прикрепленных аудиофайлах. Распознай текст, проверь правильность и оцени произношение.
+Студент произнес перевод предложений в прикрепленных аудиофайлах. 
+Распознай текст каждого аудио, проверь правильность перевода и оцени произношение.
 {
     "main_topic": "ТОЧНОЕ название темы из таблицы",
-    "correct_variant": "Правильный английский перевод",
-    "alternatives": ["Вариант 2"],
     "score": 6,
-    "errors": [{"type": "Грамматика", "explanation": "..."}],
-    "recommendation": "...",
-    "new_vocabulary": ["word - перевод"]
+    "sentences_feedback": [
+        {
+            "sentence_number": 1,
+            "student_transcription": "Распознанный текст из 1-го аудио, что сказал студент",
+            "correct_variant": "Правильный английский перевод 1-го предложения",
+            "alternatives": ["Альтернативный вариант перевода"],
+            "errors": [{"type": "Грамматика", "explanation": "..."}]
+        }
+    ],
+    "recommendation": "Общая рекомендация..."
 }
 
 ПРАВИЛА ЗАПОЛНЕНИЯ ПРИ ПРОВЕРКЕ:
 1. main_topic (Тема):
    - Ты ОБЯЗАН выбрать тему СТРОГО из заголовков "Context Table".
    - ПРИОРИТЕТ: Грамматика важнее лексики!
-2. new_vocabulary (Словарь):
-   - Включай сюда ТОЛЬКО слова из поля "correct_variant".
-   - Формат: "english_word - русский перевод".
+2. sentences_feedback (Построчный анализ):
+   - Сделай анализ ДЛЯ КАЖДОГО предложения отдельно (массив объектов от 1 до 5).
+   - Обязательно напиши, что услышал от студента (`student_transcription`), чтобы он видел, правильно ли его поняли.
+   - Укажи ошибки произношения в массиве errors, если они есть.
 3. CRITICAL RULE (ЯЗЫК И АУДИО):     
    - Если ответ на русском языке или аудио пустые -> "score": 0.
-   - Укажи ошибки произношения в массиве errors, если они есть.
 
 РЕЖИМ 2: ГЕНЕРАЦИЯ ЗАДАНИЯ (Action: GENERATE_TASK)
 Твоя задача — придумать 5 НОВЫХ предложений НА РУССКОМ ЯЗЫКЕ.
@@ -79,12 +94,9 @@ class GraderAgent:
     def _ensure_schema(self, data: Dict) -> Dict:
         return {
             "main_topic": data.get("main_topic", "General"),
-            "correct_variant": data.get("correct_variant", ""),
-            "alternatives": data.get("alternatives", []),
             "score": data.get("score", 0),
-            "errors": data.get("errors", []),
+            "sentences_feedback": data.get("sentences_feedback", []),
             "recommendation": data.get("recommendation", ""),
-            "new_vocabulary": data.get("new_vocabulary", []),
         }
 
     async def grade_translation(
@@ -140,12 +152,17 @@ class GraderAgent:
             return {
                 "result": {
                     "score": 0,
-                    "errors": [{"type": "System Error", "explanation": str(e)}],
                     "main_topic": "General",
-                    "correct_variant": "Error processing answer",
-                    "alternatives": [],
+                    "sentences_feedback": [
+                        {
+                            "sentence_number": 1,
+                            "student_transcription": "",
+                            "correct_variant": "Error processing answer",
+                            "alternatives": [],
+                            "errors": [{"type": "System Error", "explanation": str(e)}],
+                        }
+                    ],
                     "recommendation": "Try again later",
-                    "new_vocabulary": [],
                 },
                 "tokens": {"input": 0, "output": 0},
             }

@@ -11,6 +11,44 @@ def format_token_display(state):
     return f"**📊 Токены за сессию:** Вход: {state['input']} | Выход: {state['output']} | Потрачено: ${state['cost']:.4f}"
 
 
+def generate_feedback_markdown(result, score, topic):
+    feedback = f"### Оценка: {score}/10\n"
+    feedback += f"**Тема:** {topic}\n\n"
+
+    sentences = result.get("sentences_feedback", [])
+    if sentences:
+        for s in sentences:
+            feedback += f"#### Предложение {s.get('sentence_number', '?')}\n"
+            if s.get("student_transcription"):
+                feedback += f"🗣 **Вы сказали:** {s.get('student_transcription')}\n"
+            feedback += f"✅ **Правильный вариант:** {s.get('correct_variant', '')}\n"
+
+            alts = s.get("alternatives", [])
+            if alts:
+                feedback += f"🔄 **Альтернативы:** {', '.join(alts)}\n"
+
+            errors = s.get("errors", [])
+            if errors:
+                feedback += "**Ошибки:**\n"
+                for err in errors:
+                    feedback += f"- *{err.get('type', 'Error')}*: {err.get('explanation', '')}\n"
+            else:
+                feedback += "✨ **Ошибок нет!**\n"
+            feedback += "\n---\n"
+    else:
+        # Fallback для старых записей из журнала
+        feedback += f"**Правильный вариант:**\n{result.get('correct_variant', '')}\n\n"
+        if result.get("errors"):
+            feedback += "**Ошибки:**\n"
+            for err in result.get("errors", []):
+                feedback += (
+                    f"- *{err.get('type', 'Error')}*: {err.get('explanation', '')}\n"
+                )
+
+    feedback += f"\n**Рекомендация:** {result.get('recommendation', '')}\n"
+    return feedback
+
+
 async def init_task(token_state):
     table_context, journal_context = db.get_context()
     task_response = await agent.generate_new_task(table_context, journal_context)
@@ -42,7 +80,7 @@ async def process_submission(
             audio3,
             audio4,
             audio5,
-            gr.update(),  # <--- Добавлено для сохранения таблицы без изменений
+            gr.update(),
         )
 
     table_context, journal_context = db.get_context()
@@ -59,27 +97,13 @@ async def process_submission(
 
     score = result.get("score", 0)
     topic = result.get("main_topic", "General")
-    vocab = result.get("new_vocabulary", [])
 
     db.add_journal_entry(task_id, audios, result, score)
-    db.update_performance(topic, score, vocab)
+    db.update_performance(topic, score)
 
-    # Форматируем обратную связь
-    feedback = f"### Оценка: {score}/10\n"
-    feedback += f"**Тема:** {topic}\n\n"
-    feedback += f"**Правильный вариант:**\n{result.get('correct_variant', '')}\n\n"
-    if result.get("errors"):
-        feedback += "**Ошибки:**\n"
-        for err in result.get("errors", []):
-            feedback += (
-                f"- *{err.get('type', 'Error')}*: {err.get('explanation', '')}\n"
-            )
-    feedback += f"\n**Рекомендация:** {result.get('recommendation', '')}\n"
+    feedback = generate_feedback_markdown(result, score, topic)
 
-    # Получаем следующее задание и обновляем токены
     next_task_text, next_task_id, token_state, token_disp = await init_task(token_state)
-
-    # ИЗМЕНЕНО: Получаем свежие данные для таблицы Обернутые в gr.update()
     new_perf_ui = update_performance_ui()
 
     return (
@@ -98,19 +122,17 @@ async def process_submission(
 
 
 def get_performance_data():
-    """Только достает данные из БД и формирует 2D-массив"""
     try:
         data = db.get_all_performance()
         if not data:
-            return [["Нет данных", "0.0", ""]]
-        return [[str(row[0]), str(row[1]), str(row[2])] for row in data]
+            return [["Нет данных", "0.0"]]
+        return [[str(row[0]), str(row[1])] for row in data]
     except Exception as e:
         print(f"Ошибка загрузки успеваемости: {e}")
-        return [["Ошибка БД", str(e), ""]]
+        return [["Ошибка БД", str(e)]]
 
 
 def update_performance_ui():
-    """Специальная обертка для кнопок, заставляет Gradio перерисовать таблицу"""
     return gr.update(value=get_performance_data())
 
 
@@ -136,16 +158,7 @@ def load_journal_entry(choice):
         score = entry.get("score", 0)
         topic = result.get("main_topic", "General")
 
-        feedback = f"### Оценка: {score}/10\n"
-        feedback += f"**Тема:** {topic}\n\n"
-        feedback += f"**Правильный вариант:**\n{result.get('correct_variant', '')}\n\n"
-        if result.get("errors"):
-            feedback += "**Ошибки:**\n"
-            for err in result.get("errors", []):
-                feedback += (
-                    f"- *{err.get('type', 'Error')}*: {err.get('explanation', '')}\n"
-                )
-        feedback += f"\n**Рекомендация:** {result.get('recommendation', '')}\n"
+        feedback = generate_feedback_markdown(result, score, topic)
 
         audios = entry.get("audio_paths", [])
         audios_out = []
@@ -184,29 +197,35 @@ def build_ui():
                         )
 
                         gr.Markdown("### 🎙️ Запись ответов (по одному на предложение):")
+                        # ДОБАВЛЕН format="mp3" ко всем микрофонам
                         audio1 = gr.Audio(
                             sources=["microphone"],
                             type="filepath",
+                            format="mp3",
                             label="Предложение 1",
                         )
                         audio2 = gr.Audio(
                             sources=["microphone"],
                             type="filepath",
+                            format="mp3",
                             label="Предложение 2",
                         )
                         audio3 = gr.Audio(
                             sources=["microphone"],
                             type="filepath",
+                            format="mp3",
                             label="Предложение 3",
                         )
                         audio4 = gr.Audio(
                             sources=["microphone"],
                             type="filepath",
+                            format="mp3",
                             label="Предложение 4",
                         )
                         audio5 = gr.Audio(
                             sources=["microphone"],
                             type="filepath",
+                            format="mp3",
                             label="Предложение 5",
                         )
 
@@ -223,11 +242,11 @@ def build_ui():
             # Вторая вкладка: Успеваемость
             with gr.Tab("📈 Успеваемость") as perf_tab:
                 perf_table = gr.Dataframe(
-                    value=get_performance_data(),  # <--- Изменили название функции
-                    headers=["Тема", "Средний балл", "Изученные слова"],
-                    datatype=["str", "str", "str"],
+                    value=get_performance_data(),
+                    headers=["Тема", "Средний балл"],
+                    datatype=["str", "str"],
                     type="array",
-                    column_count=(3, "fixed"),
+                    column_count=(2, "fixed"),
                     interactive=False,
                 )
                 refresh_perf_btn = gr.Button("Обновить данные")
@@ -248,18 +267,14 @@ def build_ui():
                     with gr.Column():
                         journal_feedback = gr.Markdown("Здесь появится разбор.")
 
-        # ЗАГРУЗКА: Инициируем только первое задание при запуске
         demo.load(
             fn=init_task,
             inputs=[token_state],
             outputs=[task_display, task_id_state, token_state, token_display],
         )
 
-        # ДИНАМИЧЕСКАЯ ПОДГРУЗКА: Обновляем таблицы в момент клика по вкладке
-        # ВАЖНО: Мы удалили perf_tab.select, чтобы исключить баг Svelte
         journal_tab.select(fn=load_journal_choices, outputs=[journal_dropdown])
 
-        # Обработка кнопок
         refresh_perf_btn.click(fn=update_performance_ui, outputs=[perf_table])
         journal_refresh_btn.click(fn=load_journal_choices, outputs=[journal_dropdown])
 
@@ -269,7 +284,6 @@ def build_ui():
             outputs=[journal_feedback, j_a1, j_a2, j_a3, j_a4, j_a5],
         )
 
-        # Обработка отправки ответа на проверку
         submit_btn.click(
             fn=process_submission,
             inputs=[
@@ -293,7 +307,7 @@ def build_ui():
                 audio3,
                 audio4,
                 audio5,
-                perf_table,  # <--- ДОБАВЛЕНО: Таблица обновляется сама при отправке задания
+                perf_table,
             ],
         )
 

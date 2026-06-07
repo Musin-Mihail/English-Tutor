@@ -136,9 +136,7 @@ class DatabaseManager:
             session.add(journal)
             session.commit()
 
-    def update_performance(
-        self, topic_name: str, score: float, new_vocabulary: List[str]
-    ):
+    def update_performance(self, topic_name: str, score: float):
         if not topic_name:
             return
         with self.SessionLocal() as session:
@@ -154,15 +152,7 @@ class DatabaseManager:
             topic.scores_list = json.dumps(scores)
             topic.average_score = round(sum(scores) / len(scores), 1)
 
-            vocab = (
-                json.loads(topic.active_vocabulary) if topic.active_vocabulary else []
-            )
-            for word in new_vocabulary:
-                w_clean = str(word).strip()
-                if w_clean and w_clean not in vocab and len(w_clean) > 2:
-                    vocab.append(w_clean)
-            topic.active_vocabulary = json.dumps(vocab, ensure_ascii=False)
-
+            # Логика обновления словаря удалена по запросу
             session.commit()
 
     def get_all_performance(self):
@@ -170,11 +160,8 @@ class DatabaseManager:
             topics = session.query(UserPerformance).all()
             result = []
             for t in topics:
-                vocab_list = (
-                    json.loads(t.active_vocabulary) if t.active_vocabulary else []
-                )
-                vocab_str = ", ".join(vocab_list)
-                result.append([t.topic_name, t.average_score, vocab_str])
+                # Возвращаем только 2 колонки
+                result.append([t.topic_name, t.average_score])
             return result
 
     def get_journal_history_full(self):
