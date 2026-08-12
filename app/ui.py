@@ -1,14 +1,36 @@
 import os
 import gradio as gr
-from app.services.grader_agent import GraderAgent
+from app.core.config import settings
+from app.services.grader_factory import create_grader_agent
 from app.data.database import DatabaseManager
 
-agent = GraderAgent()
+agent = create_grader_agent()
 db = DatabaseManager()
 
 
+def _apply_token_usage(token_state, tokens):
+    token_state["input"] += tokens["input"]
+    token_state["output"] += tokens["output"]
+    if settings.AI_PROVIDER == "gemini":
+        token_state["cost"] = (token_state["input"] / 1_000_000) * 0.50 + (
+            token_state["output"] / 1_000_000
+        ) * 3.00
+    return token_state
+
+
 def format_token_display(state):
-    return f"**📊 Токены за сессию:** Вход: {state['input']} | Выход: {state['output']} | Потрачено: ${state['cost']:.4f}"
+    provider = settings.AI_PROVIDER
+    if provider == "gemini":
+        return (
+            f"**📊 Токены за сессию (Gemini):** "
+            f"Вход: {state['input']} | Выход: {state['output']} | "
+            f"Потрачено: ${state['cost']:.4f}"
+        )
+    return (
+        f"**📊 Токены за сессию (Cursor):** "
+        f"Вход: {state['input']} | Выход: {state['output']} | "
+        f"Стоимость — в [дашборде Cursor](https://cursor.com/dashboard/usage)"
+    )
 
 
 def generate_feedback_markdown(result, score, topic):
@@ -54,11 +76,7 @@ async def init_task(token_state):
     task_response = await agent.generate_new_task(table_context, journal_context)
     task_text = task_response["result"]
 
-    token_state["input"] += task_response["tokens"]["input"]
-    token_state["output"] += task_response["tokens"]["output"]
-    token_state["cost"] = (token_state["input"] / 1_000_000) * 0.50 + (
-        token_state["output"] / 1_000_000
-    ) * 3.00
+    _apply_token_usage(token_state, task_response["tokens"])
 
     task_id = db.add_task(task_text)
     return task_text, task_id, token_state, format_token_display(token_state)
@@ -89,11 +107,7 @@ async def process_submission(
     )
     result = eval_response["result"]
 
-    token_state["input"] += eval_response["tokens"]["input"]
-    token_state["output"] += eval_response["tokens"]["output"]
-    token_state["cost"] = (token_state["input"] / 1_000_000) * 0.50 + (
-        token_state["output"] / 1_000_000
-    ) * 3.00
+    _apply_token_usage(token_state, eval_response["tokens"])
 
     score = result.get("score", 0)
     topic = result.get("main_topic", "General")
@@ -178,9 +192,7 @@ def build_ui():
         gr.Markdown("# 🎓 English Tutor AI (Voice Edition)")
 
         token_state = gr.State(value={"input": 0, "output": 0, "cost": 0.0})
-        token_display = gr.Markdown(
-            "**📊 Токены за сессию:** Вход: 0 | Выход: 0 | Потрачено: $0.0000"
-        )
+        token_display = gr.Markdown("**📊 Токены за сессию:** Вход: 0 | Выход: 0")
 
         with gr.Tabs():
             # Первая вкладка: Практика
@@ -197,35 +209,35 @@ def build_ui():
                         )
 
                         gr.Markdown("### 🎙️ Запись ответов (по одному на предложение):")
-                        # ДОБАВЛЕН format="mp3" ко всем микрофонам
+                        # WAV — без ffmpeg; mp3 требует установленный ffmpeg в PATH
                         audio1 = gr.Audio(
                             sources=["microphone"],
                             type="filepath",
-                            format="mp3",
+                            format="wav",
                             label="Предложение 1",
                         )
                         audio2 = gr.Audio(
                             sources=["microphone"],
                             type="filepath",
-                            format="mp3",
+                            format="wav",
                             label="Предложение 2",
                         )
                         audio3 = gr.Audio(
                             sources=["microphone"],
                             type="filepath",
-                            format="mp3",
+                            format="wav",
                             label="Предложение 3",
                         )
                         audio4 = gr.Audio(
                             sources=["microphone"],
                             type="filepath",
-                            format="mp3",
+                            format="wav",
                             label="Предложение 4",
                         )
                         audio5 = gr.Audio(
                             sources=["microphone"],
                             type="filepath",
-                            format="mp3",
+                            format="wav",
                             label="Предложение 5",
                         )
 
