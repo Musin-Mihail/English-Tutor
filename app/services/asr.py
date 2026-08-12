@@ -3,7 +3,7 @@ import sys
 import time
 from functools import lru_cache
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List
 
 from app.core.config import settings
 from app.paths import DATA_DIR
@@ -218,26 +218,87 @@ def preload_whisper_model() -> None:
     print("--- Whisper ASR model ready ---")
 
 
+_LITERAL_PROMPT = (
+    "Verbatim transcript of non-native English. Include grammar mistakes, "
+    "mispronunciations, and disfluencies. Do not correct the speaker."
+)
+
+
+def empty_whisper_result() -> Dict[str, Any]:
+    return {
+        "text": "",
+        "words": [],
+        "avg_logprob": 0.0,
+        "low_confidence_words": [],
+    }
+
+
+def _collect_whisper_result(segments) -> Dict[str, Any]:
+    texts: list[str] = []
+    words: list[dict[str, Any]] = []
+    logprobs: list[float] = []
+    threshold = settings.ASR_LOW_CONFIDENCE
+
+    for segment in segments:
+        piece = (segment.text or "").strip()
+        if piece:
+            texts.append(piece)
+        if segment.avg_logprob is not None:
+            logprobs.append(float(segment.avg_logprob))
+        for item in segment.words or []:
+            token = (item.word or "").strip()
+            if not token:
+                continue
+            prob = float(item.probability) if item.probability is not None else 1.0
+            words.append({"word": token, "probability": prob})
+
+    seen: set[str] = set()
+    low_confidence: list[str] = []
+    for item in words:
+        if item["probability"] >= threshold:
+            continue
+        key = item["word"].lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        low_confidence.append(item["word"])
+
+    return {
+        "text": " ".join(texts).strip(),
+        "words": words,
+        "avg_logprob": sum(logprobs) / len(logprobs) if logprobs else 0.0,
+        "low_confidence_words": low_confidence,
+    }
+
+
 class LocalTranscriber:
     """Локальное распознавание речи через faster-whisper (GPU при наличии CUDA)."""
 
-    def transcribe_files(self, audio_paths: List[str]) -> List[str]:
-        transcriptions: List[str] = []
+    def transcribe_files(self, audio_paths: List[str]) -> List[Dict[str, Any]]:
+        results: List[Dict[str, Any]] = []
         model = _get_whisper_model()
 
         for path in audio_paths:
             if not path or not os.path.exists(path):
-                transcriptions.append("")
+                results.append(empty_whisper_result())
                 continue
 
             segments, _info = model.transcribe(
                 path,
                 language="en",
-                beam_size=5,
+                beam_size=settings.ASR_BEAM_SIZE,
+                best_of=1,
+                temperature=0.0,
                 vad_filter=True,
+                condition_on_previous_text=settings.ASR_CONDITION_ON_PREVIOUS_TEXT,
+                word_timestamps=True,
+                initial_prompt=_LITERAL_PROMPT,
             )
-            text = " ".join(segment.text.strip() for segment in segments).strip()
-            transcriptions.append(text)
-            print(f"[ASR] {os.path.basename(path)} -> {text!r}")
+            result = _collect_whisper_result(segments)
+            results.append(result)
+            print(
+                f"[ASR] {os.path.basename(path)} -> {result['text']!r} "
+                f"(low_conf={result['low_confidence_words']})"
+            )
 
-        return transcriptions
+        return results

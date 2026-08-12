@@ -17,5 +17,16 @@ nvidia-cublas-cu12>=12.8
 nvidia-cudnn-cu12>=9.0
 nvidia-cuda-nvrtc-cu12>=12.8
 
+# Acoustic ASR (wav2vec2 CTC, weaker LM — closer to what was said)
+transformers>=4.44.0
+torch>=2.4.0
+numpy>=1.26.0
+
+# Local TTS (Kokoro ONNX). 0.4.8+ requires Python <3.14; 0.4.7 is the last
+# release that installs on 3.14. Phonemizer is bundled (espeakng-loader).
+kokoro-onnx>=0.4.4,<0.4.8
+onnxruntime>=1.20.1
+soundfile>=0.13.0
+
 # Optional: legacy Gemini provider (AI_PROVIDER=gemini)
 google-genai==1.61.0

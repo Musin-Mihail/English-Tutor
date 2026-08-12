@@ -3,9 +3,11 @@ import gradio as gr
 from app.core.config import settings
 from app.services.grader_factory import create_grader_agent
 from app.data.database import DatabaseManager
+from app.services.tts import pad_audio_slots, synthesize_correct_variants
 
 agent = create_grader_agent()
 db = DatabaseManager()
+_EMPTY_TTS = pad_audio_slots([])
 
 
 def _apply_token_usage(token_state, tokens):
@@ -99,6 +101,7 @@ async def process_submission(
             audio4,
             audio5,
             gr.update(),
+            *_EMPTY_TTS,
         )
 
     table_context, journal_context = db.get_context()
@@ -116,6 +119,7 @@ async def process_submission(
     db.update_performance(topic, score)
 
     feedback = generate_feedback_markdown(result, score, topic)
+    tts_paths = pad_audio_slots(synthesize_correct_variants(result))
 
     next_task_text, next_task_id, token_state, token_disp = await init_task(token_state)
     new_perf_ui = update_performance_ui()
@@ -132,6 +136,7 @@ async def process_submission(
         None,
         None,
         new_perf_ui,
+        *tts_paths,
     )
 
 
@@ -160,19 +165,20 @@ def load_journal_choices():
 
 def load_journal_entry(choice):
     if not choice:
-        return "Выберите запись", None, None, None, None, None
+        return "Выберите запись", None, None, None, None, None, *_EMPTY_TTS
     try:
         entry_id = int(choice.split(":")[0])
         history = db.get_journal_history_full()
         entry = next((item for item in history if item["id"] == entry_id), None)
         if not entry:
-            return "Запись не найдена", None, None, None, None, None
+            return "Запись не найдена", None, None, None, None, None, *_EMPTY_TTS
 
         result = entry["ai_feedback"]
         score = entry.get("score", 0)
         topic = result.get("main_topic", "General")
 
         feedback = generate_feedback_markdown(result, score, topic)
+        tts_paths = pad_audio_slots(synthesize_correct_variants(result))
 
         audios = entry.get("audio_paths", [])
         audios_out = []
@@ -182,9 +188,9 @@ def load_journal_entry(choice):
             else:
                 audios_out.append(None)
 
-        return feedback, *audios_out
+        return feedback, *audios_out, *tts_paths
     except Exception as e:
-        return f"Ошибка загрузки: {e}", None, None, None, None, None
+        return f"Ошибка загрузки: {e}", None, None, None, None, None, *_EMPTY_TTS
 
 
 def build_ui():
@@ -250,6 +256,12 @@ def build_ui():
                         feedback_display = gr.Markdown(
                             "Здесь появится разбор ваших ошибок и оценка."
                         )
+                        gr.Markdown("### 🔊 Правильный вариант (озвучка):")
+                        tts1 = gr.Audio(label="Правильный вариант 1", interactive=False)
+                        tts2 = gr.Audio(label="Правильный вариант 2", interactive=False)
+                        tts3 = gr.Audio(label="Правильный вариант 3", interactive=False)
+                        tts4 = gr.Audio(label="Правильный вариант 4", interactive=False)
+                        tts5 = gr.Audio(label="Правильный вариант 5", interactive=False)
 
             # Вторая вкладка: Успеваемость
             with gr.Tab("📈 Успеваемость") as perf_tab:
@@ -278,6 +290,22 @@ def build_ui():
                         j_a5 = gr.Audio(label="Ответ 5", interactive=False)
                     with gr.Column():
                         journal_feedback = gr.Markdown("Здесь появится разбор.")
+                        gr.Markdown("### 🔊 Правильный вариант (озвучка):")
+                        j_tts1 = gr.Audio(
+                            label="Правильный вариант 1", interactive=False
+                        )
+                        j_tts2 = gr.Audio(
+                            label="Правильный вариант 2", interactive=False
+                        )
+                        j_tts3 = gr.Audio(
+                            label="Правильный вариант 3", interactive=False
+                        )
+                        j_tts4 = gr.Audio(
+                            label="Правильный вариант 4", interactive=False
+                        )
+                        j_tts5 = gr.Audio(
+                            label="Правильный вариант 5", interactive=False
+                        )
 
         demo.load(
             fn=init_task,
@@ -293,7 +321,19 @@ def build_ui():
         journal_dropdown.change(
             fn=load_journal_entry,
             inputs=[journal_dropdown],
-            outputs=[journal_feedback, j_a1, j_a2, j_a3, j_a4, j_a5],
+            outputs=[
+                journal_feedback,
+                j_a1,
+                j_a2,
+                j_a3,
+                j_a4,
+                j_a5,
+                j_tts1,
+                j_tts2,
+                j_tts3,
+                j_tts4,
+                j_tts5,
+            ],
         )
 
         submit_btn.click(
@@ -320,6 +360,11 @@ def build_ui():
                 audio4,
                 audio5,
                 perf_table,
+                tts1,
+                tts2,
+                tts3,
+                tts4,
+                tts5,
             ],
         )
 

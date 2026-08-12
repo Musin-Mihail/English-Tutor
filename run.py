@@ -30,6 +30,9 @@ if PROXY_URL:
         "huggingface.co",
         "hf.co",
         "cdn-lfs.huggingface.co",
+        "github.com",
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
     ]
     existing = os.environ.get("no_proxy") or os.environ.get("NO_PROXY") or ""
     merged = ",".join(
@@ -63,6 +66,24 @@ if __name__ == "__main__":
                 "и CUDA-библиотеки (nvidia-cublas-cu12), затем перезапустите."
             )
             sys.exit(1)
+
+        if settings.ACOUSTIC_ASR:
+            from app.services.acoustic_asr import preload_acoustic_asr
+
+            try:
+                preload_acoustic_asr()
+            except Exception as e:
+                print(f"!!! Acoustic ASR preload failed: {e}")
+                print("Продолжаем без wav2vec2 — будет только Whisper.")
+
+    if settings.TTS_ENABLED and settings.TTS_PRELOAD:
+        from app.services.tts import preload_tts
+
+        try:
+            preload_tts()
+        except Exception as e:
+            print(f"!!! TTS preload failed: {e}")
+            print("Сервер запущен, но озвучка правильного варианта недоступна.")
 
     from app.ui import build_ui
 

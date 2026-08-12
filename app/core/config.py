@@ -25,6 +25,18 @@ class Settings(BaseSettings):
     # Локальный каталог для весов Whisper (None → app/data/whisper_models)
     ASR_DOWNLOAD_ROOT: Optional[str] = None
     ASR_PRELOAD: bool = True
+    ASR_BEAM_SIZE: int = 1
+    ASR_CONDITION_ON_PREVIOUS_TEXT: bool = False
+    ASR_LOW_CONFIDENCE: float = 0.45
+
+    ACOUSTIC_ASR: bool = True
+    ACOUSTIC_ASR_MODEL: str = "jonatasgrosman/wav2vec2-large-xlsr-53-english"
+    ACOUSTIC_ASR_DEVICE: str = "auto"
+
+    TTS_ENABLED: bool = True
+    TTS_VOICE: str = "af_heart"
+    TTS_PRELOAD: bool = True
+    TTS_SPEED: float = 1.0
 
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",

@@ -128,6 +128,9 @@ app/data/ENGLISH_training_journal.md
 app/data/tutor.db
 app/data/audio_records/
 app/data/whisper_models/
+app/data/wav2vec2_models/
+app/data/tts_models/
+app/data/tts_cache/
 
 # But DO NOT ignore the templates (so they are committed)
 !app/data/templates/

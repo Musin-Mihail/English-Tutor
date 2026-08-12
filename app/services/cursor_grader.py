@@ -12,21 +12,24 @@ from cursor_sdk import (
 
 from app.core.config import settings
 from app.paths import PROJECT_ROOT
-from app.services.asr import LocalTranscriber
 from app.services.prompts import (
     MASTER_PROMPT_TEXT,
     ensure_grader_schema,
     error_grader_result,
     parse_json_response,
 )
+from app.services.pronunciation import (
+    analyze_recordings,
+    augment_pronunciation_errors,
+    format_analysis_block,
+)
 
 
 class CursorGraderAgent:
-    """Провайдер на Cursor SDK (локальный агент) + Whisper ASR на GPU."""
+    """Провайдер на Cursor SDK (локальный агент) + локальный ASR на GPU."""
 
     def __init__(self, model_name: str | None = None):
         self.model_name = model_name or settings.CURSOR_MODEL
-        self.transcriber = LocalTranscriber()
         self._client: Any = None
         self._client_cm: Any = None
         self._client_loop: asyncio.AbstractEventLoop | None = None
@@ -106,24 +109,19 @@ class CursorGraderAgent:
         context_journal: Optional[str] = "",
     ) -> Dict[str, Any]:
         try:
-            transcriptions = await asyncio.to_thread(
-                self.transcriber.transcribe_files, audio_paths
-            )
-            transcription_block = "\n".join(
-                f'Предложение {i + 1}: "{text}"'
-                for i, text in enumerate(transcriptions)
-            )
+            analyses = await asyncio.to_thread(analyze_recordings, audio_paths)
+            transcription_block = format_analysis_block(analyses)
 
             user_message = f"""
             {MASTER_PROMPT_TEXT}
             --- РЕЖИМ: ПРОВЕРКА ---
             Original Task (Russian): "{original_task}"
 
-            РАСПОЗНАННЫЕ ОТВЕТЫ СТУДЕНТА (локальный Whisper на GPU):
+            РАСПОЗНАННЫЕ ОТВЕТЫ СТУДЕНТА (локальный анализ на GPU):
             {transcription_block}
 
-            Используй эти распознанные тексты как student_transcription для каждого предложения.
-            Если распознавание пустое — считай, что студент не ответил.
+            student_transcription для каждого предложения = literal_transcript (как есть, без правок).
+            Если literal_transcript пустой — считай, что студент не ответил.
 
             CONTEXT TABLE:
             {context_table}
@@ -133,9 +131,12 @@ class CursorGraderAgent:
             raw_text, tokens = await self._prompt(user_message)
             print(f"[CHECK/Cursor] Raw response: {raw_text}")
             parsed_response = parse_json_response(raw_text)
+            result = augment_pronunciation_errors(
+                ensure_grader_schema(parsed_response), analyses
+            )
 
             return {
-                "result": ensure_grader_schema(parsed_response),
+                "result": result,
                 "tokens": tokens,
             }
         except Exception as e:
