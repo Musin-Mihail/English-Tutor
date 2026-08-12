@@ -123,8 +123,10 @@ cython_debug/
 
 # --- PERSONAL DATA EXCLUSION ---
 # Ignore the active user data files
-backend/app/data/ENGLISH_performance_table.md
-backend/app/data/ENGLISH_training_journal.md
+app/data/ENGLISH_performance_table.md
+app/data/ENGLISH_training_journal.md
+app/data/tutor.db
+app/data/audio_records/
 
 # But DO NOT ignore the templates (so they are committed)
-!backend/app/data/templates/
+!app/data/templates/

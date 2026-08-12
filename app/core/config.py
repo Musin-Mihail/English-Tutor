@@ -1,6 +1,8 @@
-import os
 from typing import List
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.paths import PROJECT_ROOT
 
 
 class Settings(BaseSettings):
@@ -9,7 +11,9 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:4200"]
     GOOGLE_API_KEY: str
     model_config = SettingsConfigDict(
-        env_file=".env", env_ignore_empty=True, extra="ignore"
+        env_file=PROJECT_ROOT / ".env",
+        env_ignore_empty=True,
+        extra="ignore",
     )
 
 

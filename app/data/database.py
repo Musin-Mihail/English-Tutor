@@ -1,7 +1,9 @@
-import os
 import json
+import os
 import shutil
 from datetime import datetime
+
+from app.paths import AUDIO_DIR, DB_PATH
 from typing import List, Dict, Optional
 from sqlalchemy import (
     create_engine,
@@ -52,9 +54,13 @@ class Journal(Base):
 
 
 class DatabaseManager:
-    def __init__(self, db_url="sqlite:///app/data/tutor.db"):
-        self.audio_dir = "app/data/audio_records"
+    def __init__(self, db_url: Optional[str] = None):
+        DATA_DIR = DB_PATH.parent
+        os.makedirs(DATA_DIR, exist_ok=True)
+        self.audio_dir = str(AUDIO_DIR)
         os.makedirs(self.audio_dir, exist_ok=True)
+        if db_url is None:
+            db_url = f"sqlite:///{DB_PATH.as_posix()}"
         self.engine = create_engine(db_url, connect_args={"check_same_thread": False})
         Base.metadata.create_all(self.engine)
         self.SessionLocal = sessionmaker(
